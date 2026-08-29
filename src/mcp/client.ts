@@ -1,10 +1,4 @@
-export type JsonRpcResponse = {
-  jsonrpc: '2.0';
-  id?: number | string | null;
-  result?: unknown;
-  error?: { code: number; message: string; data?: unknown };
-};
-
+export type JsonRpcResponse = { jsonrpc: '2.0'; id?: number | string | null; result?: unknown; error?: { code: number; message: string; data?: unknown } };
 export type McpTool = { name: string; title?: string; description?: string; inputSchema?: Record<string, unknown>; outputSchema?: Record<string, unknown> };
 export type McpResource = { uri: string; name?: string; title?: string; description?: string; mimeType?: string };
 export type McpPrompt = { name: string; title?: string; description?: string; arguments?: Array<{ name: string; description?: string; required?: boolean }> };
@@ -12,13 +6,13 @@ export type McpCatalog = { protocolVersion: string; serverInfo?: Record<string, 
 export type McpCallResult = { raw: JsonRpcResponse; result: unknown };
 
 const CLIENT_INFO = { name: 'mcp-caply', version: '0.1.0' };
-const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26'];
+const PROTOCOL_VERSIONS = ['2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26'];
 
 /** Direct MCP Streamable HTTP client. No model or agent layer. */
 export class McpHttpClient {
   private id = 0;
-  private sessionId?: string;
   private protocolVersion = PROTOCOL_VERSIONS[0];
+  private legacySessionId?: string;
 
   constructor(private readonly url: string, private readonly apiKey?: string) {}
 
@@ -29,7 +23,8 @@ export class McpHttpClient {
       'MCP-Protocol-Version': this.protocolVersion,
     };
     if (this.apiKey) headers.Authorization = `Bearer ${this.apiKey}`;
-    if (this.sessionId) headers['Mcp-Session-Id'] = this.sessionId;
+    // Session IDs existed in earlier Streamable HTTP revisions only.
+    if (this.legacySessionId) headers['Mcp-Session-Id'] = this.legacySessionId;
     return headers;
   }
 
@@ -52,7 +47,7 @@ export class McpHttpClient {
       body: JSON.stringify({ jsonrpc: '2.0', id: ++this.id, method, params }),
     });
     const session = response.headers.get('Mcp-Session-Id');
-    if (session) this.sessionId = session;
+    if (session && this.protocolVersion !== '2026-07-28') this.legacySessionId = session;
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
       throw new Error(`MCP HTTP ${response.status}: ${detail || response.statusText}`);
@@ -75,7 +70,7 @@ export class McpHttpClient {
     let lastError: unknown;
     for (const version of PROTOCOL_VERSIONS) {
       this.protocolVersion = version;
-      this.sessionId = undefined;
+      this.legacySessionId = undefined;
       try {
         const response = await this.request('initialize', {
           protocolVersion: version,
@@ -84,7 +79,9 @@ export class McpHttpClient {
         });
         const result = (response.result ?? {}) as Record<string, unknown>;
         this.protocolVersion = String(result.protocolVersion ?? version);
-        await this.notify('notifications/initialized');
+        // Required by older revisions. The current 2026-07-28 revision is
+        // stateless and removes protocol-level sessions, so skip it there.
+        if (this.protocolVersion !== '2026-07-28') await this.notify('notifications/initialized');
         return this.loadCatalog(result);
       } catch (error) {
         lastError = error;
