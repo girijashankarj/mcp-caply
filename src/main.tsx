@@ -4,7 +4,7 @@ import { McpHttpClient, type McpCatalog, type McpTool } from './mcp/client';
 import './styles.css';
 
 type Capability = 'tools' | 'resources' | 'prompts';
-type Server = { name: string; url: string; connected: boolean; tools: number; resources: number; prompts: number; catalog?: McpCatalog; error?: string };
+type Server = { name: string; url: string; apiKey?: string; connected: boolean; tools: number; resources: number; prompts: number; catalog?: McpCatalog; error?: string };
 
 const initialServers: Server[] = [];
 
@@ -51,7 +51,7 @@ function App() {
     try {
       const client = new McpHttpClient(serverUrl.trim(), apiKey || undefined);
       const catalog = await client.connect();
-      const server: Server = { name: serverName.trim(), url: serverUrl.trim(), connected: true, tools: catalog.tools.length, resources: catalog.resources.length, prompts: catalog.prompts.length, catalog };
+      const server: Server = { name: serverName.trim(), url: serverUrl.trim(), apiKey: apiKey || undefined, connected: true, tools: catalog.tools.length, resources: catalog.resources.length, prompts: catalog.prompts.length, catalog };
       const nextIndex = servers.length;
       setServers((items) => [...items, server]);
       setSelected(nextIndex);
@@ -59,8 +59,7 @@ function App() {
       setServerName(''); setServerUrl(''); setApiKey(''); setShowAdd(false);
       setMessage(`Connected successfully. ${catalog.tools.length} tools, ${catalog.resources.length} resources and ${catalog.prompts.length} prompts discovered.`);
     } catch (error) {
-      const messageText = errorMessage(error);
-      setMessage(`Connection failed: ${messageText}`);
+      setMessage(`Connection failed: ${errorMessage(error)}`);
     } finally {
       setBusy(false);
     }
@@ -72,7 +71,7 @@ function App() {
     try { args = JSON.parse(argumentsJson); } catch { setMessage('Arguments must be valid JSON.'); return; }
     setBusy(true); setMessage(`Executing ${selectedTool.name}…`);
     try {
-      const client = new McpHttpClient(active.url);
+      const client = new McpHttpClient(active.url, active.apiKey);
       await client.connect();
       const response = await client.callTool(selectedTool.name, args);
       setResult(response.raw);
@@ -109,6 +108,7 @@ function App() {
           <div className="tool-list">{(capabilityItems as McpTool[]).map((tool) => <button className={`tool-item ${selectedTool?.name === tool.name ? 'active' : ''}`} key={tool.name} onClick={() => { setSelectedTool(tool); setArgumentsJson('{}'); setResult(undefined); }}><strong>{tool.name}</strong><span>{tool.description || 'No description provided.'}</span></button>)}</div>
           <div className="tool-editor"><div className="editor-head"><div><div className="eyebrow">TOOL</div><h3>{selectedTool?.name ?? 'Select a tool'}</h3></div><span className="protocol-badge">tools/call</span></div>{selectedTool ? <><p className="description">{selectedTool.description || 'No description provided by the MCP server.'}</p><div className="schema-box"><div className="eyebrow">REQUEST SCHEMA</div>{fields.length ? fields.map((field) => <div className="schema-row" key={field.name}><code>{field.name}</code><span>{field.type}{field.required ? ' · required' : ''}</span><small>{field.description}</small></div>) : <pre>{JSON.stringify(selectedTool.inputSchema ?? {}, null, 2)}</pre>}</div><label className="json-label">Arguments JSON<textarea value={argumentsJson} onChange={(e) => setArgumentsJson(e.target.value)} spellCheck={false} /></label><button className="primary" disabled={busy} onClick={executeTool}>{busy ? 'Executing…' : 'Execute tool'}</button>{result !== undefined && <div className="result-box"><div className="result-head"><span>RAW JSON-RPC RESPONSE</span><button className="secondary" onClick={() => navigator.clipboard?.writeText(JSON.stringify(result, null, 2))}>Copy</button></div><pre>{JSON.stringify(result, null, 2)}</pre></div>}</> : <div className="empty-state compact"><h3>No tool selected</h3><p>Choose a discovered tool.</p></div>}</div>
         </div> : <div className="list-view">{(capabilityItems as Array<{ name?: string; uri?: string; description?: string; title?: string }>).map((item, index) => <div className="list-row" key={item.name ?? item.uri ?? index}><strong>{item.name ?? item.uri}</strong><span>{item.title ?? item.description ?? 'No description provided.'}</span></div>)}{!capabilityItems.length && <div className="empty-state compact"><h3>No {capability} exposed</h3><p>The server did not advertise this primitive.</p></div>}</div>}
+        {message.startsWith('Connection failed:') && <div className="error-banner" role="alert"><strong>Connection failed</strong><span>{message.replace('Connection failed: ', '')}</span><small>Open your browser developer console for the server's CORS/network details. Caply never hides connection errors.</small></div>}
       </section>
     </main>
 
