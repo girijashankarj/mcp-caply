@@ -10,8 +10,13 @@ const initialServers: Server[] = [];
 
 function schemaFields(tool?: McpTool) {
   const properties = (tool?.inputSchema?.properties ?? {}) as Record<string, Record<string, unknown>>;
-  const required = new Set(Array.isArray(tool?.inputSchema?.required) ? tool?.inputSchema?.required : []);
+  const required = new Set(Array.isArray(tool?.inputSchema?.required) ? tool.inputSchema.required : []);
   return Object.entries(properties).map(([name, schema]) => ({ name, type: String(schema.type ?? 'string'), required: required.has(name), description: String(schema.description ?? '') }));
+}
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
 
 function App() {
@@ -31,42 +36,53 @@ function App() {
   const active = servers[selected];
   const counts = useMemo(() => active ? { tools: active.tools, resources: active.resources, prompts: active.prompts } : { tools: 0, resources: 0, prompts: 0 }, [active]);
   const fields = schemaFields(selectedTool);
+  const capabilityItems = active?.catalog?.[capability] ?? [];
 
   async function connectServer() {
-    if (!serverName.trim() || !serverUrl.trim()) return setMessage('Server name and URL are required.');
-    setBusy(true); setMessage('Initializing MCP session and discovering capabilities...');
+    if (!serverName.trim() || !serverUrl.trim()) {
+      setMessage('Server name and URL are required.');
+      return;
+    }
+
+    setBusy(true);
+    setMessage('Connecting… checking MCP transport, authentication and CORS.');
+    setResult(undefined);
+
     try {
       const client = new McpHttpClient(serverUrl.trim(), apiKey || undefined);
       const catalog = await client.connect();
       const server: Server = { name: serverName.trim(), url: serverUrl.trim(), connected: true, tools: catalog.tools.length, resources: catalog.resources.length, prompts: catalog.prompts.length, catalog };
+      const nextIndex = servers.length;
       setServers((items) => [...items, server]);
-      setSelected(servers.length);
+      setSelected(nextIndex);
       setSelectedTool(catalog.tools[0]);
       setServerName(''); setServerUrl(''); setApiKey(''); setShowAdd(false);
-      setMessage(`Connected. ${catalog.tools.length} tools, ${catalog.resources.length} resources, ${catalog.prompts.length} prompts discovered.`);
+      setMessage(`Connected successfully. ${catalog.tools.length} tools, ${catalog.resources.length} resources and ${catalog.prompts.length} prompts discovered.`);
     } catch (error) {
-      setMessage(String(error));
-    } finally { setBusy(false); }
+      const messageText = errorMessage(error);
+      setMessage(`Connection failed: ${messageText}`);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function executeTool() {
     if (!active?.catalog || !selectedTool) return;
     let args: Record<string, unknown>;
     try { args = JSON.parse(argumentsJson); } catch { setMessage('Arguments must be valid JSON.'); return; }
-    setBusy(true); setMessage(`Executing ${selectedTool.name}...`);
+    setBusy(true); setMessage(`Executing ${selectedTool.name}…`);
     try {
-      // Re-create the client with the server URL. Credentials are intentionally
-      // not persisted by the current browser-only V1.
       const client = new McpHttpClient(active.url);
       await client.connect();
       const response = await client.callTool(selectedTool.name, args);
       setResult(response.raw);
       setMessage('MCP tool executed. Raw JSON-RPC response is shown below.');
-    } catch (error) { setMessage(String(error)); }
-    finally { setBusy(false); }
+    } catch (error) {
+      setMessage(`Tool execution failed: ${errorMessage(error)}`);
+    } finally {
+      setBusy(false);
+    }
   }
-
-  const capabilityItems = active?.catalog?.[capability] ?? [];
 
   return <div className="app-shell">
     <aside className="sidebar">
@@ -96,7 +112,7 @@ function App() {
       </section>
     </main>
 
-    {showAdd && <div className="modal-backdrop" onClick={() => setShowAdd(false)}><div className="modal" onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><div className="eyebrow">NEW CONNECTION</div><h2>Add MCP server</h2></div><button className="icon-button" onClick={() => setShowAdd(false)}>×</button></div><label>Server name<input value={serverName} onChange={(e) => setServerName(e.target.value)} placeholder="GitHub MCP" /></label><label>Streamable HTTP URL<input value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} placeholder="https://host.example/mcp" /></label><label>Bearer API key <span className="optional">optional</span><input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Held in memory only" /></label><div className="security-note"><strong>Browser security boundary</strong><span>The MCP server must permit browser CORS and expose a browser-compatible transport. Caply does not proxy your credentials through its own backend.</span></div><div className="modal-actions"><button className="secondary" onClick={() => setShowAdd(false)}>Cancel</button><button className="primary" disabled={busy} onClick={connectServer}>{busy ? 'Connecting…' : 'Connect & discover'}</button></div></div></div>}
+    {showAdd && <div className="modal-backdrop" onClick={() => !busy && setShowAdd(false)}><div className="modal" onClick={(event) => event.stopPropagation()}><div className="modal-head"><div><div className="eyebrow">NEW CONNECTION</div><h2>Add MCP server</h2></div><button className="icon-button" disabled={busy} onClick={() => setShowAdd(false)}>×</button></div><label>Server name<input value={serverName} onChange={(e) => setServerName(e.target.value)} placeholder="GitHub MCP" disabled={busy} /></label><label>Streamable HTTP URL<input value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} placeholder="https://host.example/mcp" disabled={busy} /></label><label>Bearer API key <span className="optional">optional</span><input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Held in memory only" disabled={busy} /></label><div className="security-note"><strong>Browser security boundary</strong><span>The MCP server must permit browser CORS and expose a browser-compatible transport. Caply does not proxy your credentials through its own backend.</span></div><div className="modal-actions"><button className="secondary" disabled={busy} onClick={() => setShowAdd(false)}>Cancel</button><button className="primary" disabled={busy} onClick={connectServer}>{busy ? 'Connecting…' : 'Connect & discover'}</button></div></div></div>}
   </div>;
 }
 
