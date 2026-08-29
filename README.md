@@ -2,72 +2,75 @@
 
 **Your control panel for MCP. No model required.**
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-MCP%20Caply-111827?style=for-the-badge)](https://girijashankarj.github.io/mcp-caply/)
+
+## Live Demo
+
+**[Open MCP Caply →](https://girijashankarj.github.io/mcp-caply/)**
+
 MCP Caply is an open-source, model-free MCP client for discovering and directly invoking MCP capabilities.
 
-[Documentation](docs/README.md) · [Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md) · [Roadmap](docs/ROADMAP.md)
+> **Browser note:** Direct connections from the GitHub Pages app require the MCP server to support a browser-compatible transport and allow the deployed origin through CORS. Caply does not bypass CORS through a central credential proxy.
 
 ## Product thesis
 
 **Connect → Discover → Understand → Execute → Inspect → Save → Replay.**
 
-Caply puts the human directly in the MCP interaction loop. It does not require Claude, OpenAI, Gemini or another LLM at the consumer layer. The user selects the capability, provides the parameters and judges the returned evidence.
+Caply does not require Claude, OpenAI, Gemini or another LLM at the consumer layer. The user chooses the capability, provides the parameters and makes the judgement from the returned data.
+
+## Why Caply?
+
+AI assistants are useful when you want natural-language delegation. Caply targets the different case: **direct human control over MCP capabilities**.
 
 ```text
-                  MCP Caply
-                      │
-          ┌───────────┼───────────┐
-          ▼           ▼           ▼
-      GitHub MCP   Slack MCP   Custom RAG MCP
-          │           │           │
-          └───────────┼───────────┘
-                      ▼
-                Human judgement
+Human
+  ↓
+MCP Caply
+  ↓
+MCP Server
+  ↓
+Tools / Resources / Prompts
+  ↓
+Raw / structured result
+  ↓
+Human judgement
 ```
 
-## Current V1
+## V1
 
-- Connect multiple MCP Streamable HTTP servers
+- Connect multiple MCP servers
 - Discover tools, resources and prompts
-- Render tool metadata and request schemas
-- Execute tools manually
-- Read resources and retrieve prompts through the client API
-- Show raw JSON-RPC responses
-- Browser-first credential handling with in-memory API keys
+- Render capability metadata and request schemas
+- Execute MCP operations
+- Show structured and raw responses
+- Keep credentials out of source code and avoid localStorage for secrets
 - GitHub Pages deployment
 
-## Why model-free?
-
-An AI assistant can translate natural language into tool calls and interpret the result. That is useful for delegation, but it is not always desirable.
-
-Caply supports the direct path:
+## Architecture
 
 ```text
-Human → MCP capability → Raw/structured result → Human judgement
+                     MCP Caply
+                         │
+          ┌──────────────┼──────────────┐
+          ▼              ▼              ▼
+      GitHub MCP      Slack MCP     Custom RAG MCP
+          │              │              │
+          └──────────────┼──────────────┘
+                         ▼
+                       Human
 ```
 
-This removes mandatory model inference and reasoning cost from the consumer layer. It does **not** mean every MCP service is free. A server may require its own API plan, quota or enterprise licence.
+Caply does not need to understand the internal implementation of each server. It consumes the MCP protocol and dynamically discovers declared capabilities.
 
 ## Security boundary
 
-> **Server controls authority. Caply controls invocation. Human controls judgement.**
+**Server controls authority. Caply controls invocation. Human controls judgement.**
 
-The MCP server controls authentication, authorization, scopes, key validity and exposed capabilities. Caply is responsible for secure protocol invocation and client-side credential handling.
+MCP server owners control authentication, authorization, scopes, key validity and exposed capabilities. Caply is responsible for securely invoking the MCP protocol and protecting credentials on the client side.
 
-The browser prototype does not persist API keys in localStorage and does not proxy credentials through a Caply backend.
-
-See [docs/SECURITY.md](docs/SECURITY.md).
-
-## Browser limitation
-
-GitHub Pages is a static browser deployment. A remote MCP server must permit browser access, including the required CORS behaviour and a browser-compatible transport.
-
-Caply intentionally does not add a central CORS/credential proxy just to bypass this boundary.
-
-For servers that cannot be safely consumed from a browser, a future **optional local connector** may provide a local transport path. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+The project is deliberately non-agentic. It does not need arbitrary local filesystem access, shell execution or autonomous model-driven actions.
 
 ## Development
-
-Requirements: Node.js 22+ and npm.
 
 ```bash
 npm install
@@ -82,20 +85,24 @@ npm run build
 
 ## Documentation
 
-- [Documentation index](docs/README.md)
-- [Product definition](docs/PRODUCT.md)
+- [Product](docs/PRODUCT.md)
 - [Architecture](docs/ARCHITECTURE.md)
-- [MCP protocol support](docs/MCP-PROTOCOL.md)
-- [Security model](docs/SECURITY.md)
-- [Testing strategy](docs/TESTING.md)
-- [Development guide](docs/DEVELOPMENT.md)
+- [MCP Protocol](docs/MCP-PROTOCOL.md)
+- [Security](docs/SECURITY.md)
+- [Testing](docs/TESTING.md)
+- [Development](docs/DEVELOPMENT.md)
 - [Roadmap](docs/ROADMAP.md)
+- [Contributing](CONTRIBUTING.md)
 
 ## GitHub Pages
 
-Deployment is defined in `.github/workflows/deploy.yml` and publishes the Vite `dist/` output through GitHub Pages.
+The repository includes a GitHub Actions workflow under `.github/workflows/deploy.yml` that builds the Vite application and deploys the `dist` directory to GitHub Pages.
 
 Repository: https://github.com/girijashankarj/mcp-caply
+
+## Important implementation note
+
+The GitHub Pages deployment is a static browser client. An MCP server must permit browser access for direct connection. Servers that require non-browser transports or restrictive CORS will need the future optional local connector described in the roadmap.
 
 ## License
 
