@@ -1,4 +1,5 @@
 import { StrictMode, useMemo, useState } from 'react';
+import { createRoot } from 'react-dom/client';
 import { McpHttpClient, type DiagnosticCheck, type McpCatalog, type McpTool } from './mcp/client';
 import './styles.css';
 
